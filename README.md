@@ -14,3 +14,6 @@
 2. 단면계수 구하기 등 도형을 기준으로 할 수 있는 다른 기능을 추가해보려고 합니다.
 
 사용해보시고 조언부탁드립니다. 
+
+![paradraw1](https://github.com/user-attachments/assets/cc064bb2-5c19-449a-aa91-5eaf9263919c)
+![paradraw2](https://github.com/user-attachments/assets/333a4906-8051-4ccd-8253-dc2a826e5a2c)
