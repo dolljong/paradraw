@@ -6,30 +6,44 @@
     <title>좌표 그래프 생성기</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            margin: 0 auto; 
-            padding: 20px;
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
-        #graph { 
-            border: 1px solid #ccc; 
-            display: block; 
-            margin: 20px 0;
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+        h1 {
+            margin: 0;
+            padding: 10px 20px;
+            background-color: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            flex-shrink: 0;
+        }
+        #graph {
+            border: 1px solid #ccc;
+            display: block;
             background-color: #f9f9f9;
+            width: 100%;
+            height: calc(100% - 50px);
         }
-        input, button, select { 
-            margin: 5px; 
-            padding: 5px; 
+        input, button, select {
+            margin: 5px;
+            padding: 5px;
         }
-        #variableList, #coordinateList, #lineList { 
-            margin-top: 10px; 
+        #variableList, #coordinateList, #lineList {
+            margin-top: 10px;
         }
-        .axis line, .axis path { 
-            stroke: #ccc; 
+        .axis line, .axis path {
+            stroke: #ccc;
             display: none;
         }
-        .axis text { 
-            display: none; 
+        .axis text {
+            display: none;
         }
         .toggle-switch {
             position: relative;
@@ -76,28 +90,72 @@
         }
         #graphInfo {
             width: 100%;
-            height: 200px;
-            margin-top: 20px;
+            height: 150px;
+            margin-top: 10px;
             display: block;
             resize: vertical;
         }
         .container {
             display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
+            flex: 1;
+            overflow: hidden;
         }
         .left {
             flex: 1;
-            padding-right: 20px;
-        }
-        .right {
-            flex: 3;
+            min-width: 400px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
+            border-right: 1px solid #ddd;
+        }
+        .right {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 20px;
+            max-width: 400px;
+            height: 100%;
+        }
+        .right h2 {
+            margin-top: 15px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .right h2:first-child {
+            margin-top: 0;
+        }
+        .right textarea {
+            width: 100%;
+            box-sizing: border-box;
         }
         .right input,
         .right button {
+            margin-bottom: 5px;
+        }
+        .graph-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            flex-shrink: 0;
+        }
+        .unit-selector {
+            margin-left: 10px;
+            font-size: 14px;
+        }
+        .button-group {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
             margin-bottom: 10px;
+        }
+        .button-group button {
+            flex: 1;
+            min-width: 80px;
+        }
+        #variableList, #coordinateList, #lineList, #dimList {
+            font-size: 12px;
+            color: #666;
+            margin: 5px 0 10px 0;
         }
     </style>
 </head>
@@ -105,65 +163,52 @@
     <h1>변수로 도면 그리기(paradraw)</h1>
     <div class="container">
     <div class="left">
-        <svg id="graph" width="700" height="500"></svg>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-            <div>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="showLabelsToggle" checked onchange="window.toggleLabels()">
-                    <span class="slider"></span>
-                </label>
-                좌표이름 표시
+        <svg id="graph"></svg>
+        <div class="graph-controls">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="showLabelsToggle" checked onchange="window.toggleLabels()">
+                        <span class="slider"></span>
+                    </label>
+                    좌표이름 표시
+                </div>
+                <div>
+                    치수축척: <input type="number" id="dimScaleInput" value="100" min="0.1" step="0.1" style="width: 60px;" onchange="window.setScale()">
+                </div>
             </div>
             <button onclick="window.drawGraph()">도면그리기</button>
         </div>
     </div>
     <div class="right">
-        <div id="inputs">
         <h2>변수 입력</h2>
-        <textarea id="variableInput" rows="6" placeholder="변수명=값 형식으로 한 줄에 하나씩 입력&#10;; 뒤에 주석 가능&#10;예시:&#10;H1=2;높이1&#10;H2=3;높이2&#10;B1=2.5;폭" style="width: 300px; resize: vertical;"></textarea>
-        <br>
+        <textarea id="variableInput" rows="5" placeholder="변수명=값 형식으로 한 줄에 하나씩 입력&#10;; 뒤에 주석 가능&#10;예시:&#10;H1=2;높이1&#10;H2=3;높이2"></textarea>
         <button onclick="window.addVariables()">변수 적용</button>
-        <span style="margin-left: 15px;">
-            단위:
-            <label><input type="radio" name="unit" value="m" checked> m</label>
-            <label><input type="radio" name="unit" value="mm"> mm</label>
-        </span>
         <div id="variableList"></div>
-        
+
         <h2>좌표 계산 수식</h2>
-        <input type="text" id="coordinateName" placeholder="좌표 이름">
-        <input type="text" id="xFormula" placeholder="X 좌표 수식">
-        <input type="text" id="yFormula" placeholder="Y 좌표 수식">
-        <button onclick="window.addCoordinate()">좌표 추가</button>
+        <textarea id="coordinateInput" rows="6" placeholder="점이름:x좌표,y좌표 형식&#10;; 뒤에 주석 가능&#10;예시:&#10;p1:0,0;원점&#10;p2:p1.x,p1.y+H1"></textarea>
+        <button onclick="window.addCoordinates()">좌표 적용</button>
         <div id="coordinateList"></div>
-        
+
         <h2>선 정보 입력</h2>
-        <select id="startPoint"></select>
-        <select id="endPoint"></select>
-        <button onclick="window.addLine()">선 추가</button>
+        <textarea id="lineInput" rows="4" placeholder="점들을 콤마로 연결&#10;예시: p1,p2,p3;외벽"></textarea>
+        <button onclick="window.addLines()">선 적용</button>
         <div id="lineList"></div>
 
         <h2>치수선 정보 입력</h2>
-        <select id="dimtype">
-            <option value="HDIM">HDIM</option>
-            <option value="VDIM">VDIM</option>
-            <option value="ADIM">ADIM</option>
-        </select>
-        <select id="dimdirection">
-            <option value="1">1</option>
-            <option value="-1">-1</option>
-        </select>
-        <input type="text" id="dimpntlist" placeholder="치수선 point list">
-        <button onclick="window.addDimensionLine()">치수선 추가</button>
+        <textarea id="dimInput" rows="4" placeholder="타입,방향,점1,점2,...&#10;예시: HDIM,1,p1,p2;폭"></textarea>
+        <button onclick="window.addDimensionLines()">치수선 적용</button>
         <div id="dimList"></div>
 
-        <button onclick="window.printGraphInfo()">그림 정보 출력하기</button>
-        <button onclick="window.readGraphInfo()">데이터 읽기</button>
-        <button onclick="window.loadExampleData()">예제 데이터 읽기</button>
-        <textarea id="graphInfo" placeholder="JSON 형식의 그래프 정보를 입력하거나 '그림 정보 출력하기' 버튼을 클릭하세요."></textarea>
+        <h2>데이터 관리</h2>
+        <div class="button-group">
+            <button onclick="window.printGraphInfo()">정보 출력</button>
+            <button onclick="window.readGraphInfo()">데이터 읽기</button>
+            <button onclick="window.loadExampleData()">예제 로드</button>
         </div>
+        <textarea id="graphInfo" rows="6" placeholder="JSON 형식의 그래프 정보"></textarea>
     </div>
-    
     </div>
 
     
@@ -173,8 +218,10 @@
     var variables = {};
     var variableComments = {};
     var userCoordinates = {};
+    var coordinateComments = {};
     var calculatedCoordinates = {};
     var lines = [];
+    var lineGroups = [];
     var dimensionLines = [];
     var svg, gContainer, labelContainer;
     var xScale, yScale;
@@ -266,26 +313,80 @@
                 .join(', ');
     }
 
-    function addCoordinate() {
-        var name = document.getElementById('coordinateName').value.trim();
-        var xFormula = document.getElementById('xFormula').value.trim();
-        var yFormula = document.getElementById('yFormula').value.trim();
-        if (name && xFormula && yFormula) {
-            if (userCoordinates.hasOwnProperty(name)) {
-                alert('이미 존재하는 좌표 이름입니다. 다른 이름을 사용해주세요.');
+    function addCoordinates() {
+        var input = document.getElementById('coordinateInput').value.trim();
+        if (!input) {
+            alert('좌표를 입력해주세요.');
+            return;
+        }
+
+        var inputLines = input.split('\n');
+        var newCoordinates = {};
+        var newComments = {};
+        var errors = [];
+
+        inputLines.forEach(function(line, index) {
+            var trimmedLine = line.trim();
+            if (!trimmedLine) return; // 빈 줄 무시
+
+            // 세미콜론으로 주석 분리
+            var commentIndex = trimmedLine.indexOf(';');
+            var comment = '';
+            var codePart = trimmedLine;
+
+            if (commentIndex !== -1) {
+                comment = trimmedLine.substring(commentIndex + 1).trim();
+                codePart = trimmedLine.substring(0, commentIndex).trim();
+            }
+
+            if (!codePart) return; // 주석만 있는 줄 무시
+
+            // 형식: 점이름:x좌표수식,y좌표수식
+            var colonIndex = codePart.indexOf(':');
+            if (colonIndex === -1) {
+                errors.push(`${index + 1}번째 줄: 형식 오류 (점이름:x좌표수식,y좌표수식 형식으로 입력)`);
                 return;
             }
-            userCoordinates[name] = { x: xFormula, y: yFormula };
-            updateCoordinateList();
-            updateCoordinateSelects();
-            document.getElementById('coordinateName').value = '';
-            document.getElementById('xFormula').value = '';
-            document.getElementById('yFormula').value = '';
-            calculateCoordinates();
-            drawGraph();
-        } else {
-            alert('좌표 이름과 두 수식을 모두 입력해주세요.');
+
+            var name = codePart.substring(0, colonIndex).trim();
+            var formulaPart = codePart.substring(colonIndex + 1).trim();
+
+            if (!name) {
+                errors.push(`${index + 1}번째 줄: 좌표 이름이 비어있습니다.`);
+                return;
+            }
+
+            // 첫 번째 콤마를 기준으로 x, y 분리
+            var commaIndex = formulaPart.indexOf(',');
+            if (commaIndex === -1) {
+                errors.push(`${index + 1}번째 줄: x좌표와 y좌표를 콤마로 구분해주세요.`);
+                return;
+            }
+
+            var xFormula = formulaPart.substring(0, commaIndex).trim();
+            var yFormula = formulaPart.substring(commaIndex + 1).trim();
+
+            if (!xFormula || !yFormula) {
+                errors.push(`${index + 1}번째 줄: x좌표 또는 y좌표 수식이 비어있습니다.`);
+                return;
+            }
+
+            newCoordinates[name] = { x: xFormula, y: yFormula };
+            newComments[name] = comment;
+        });
+
+        if (errors.length > 0) {
+            alert('오류:\n' + errors.join('\n'));
+            return;
         }
+
+        // 기존 좌표를 새 좌표로 교체
+        userCoordinates = newCoordinates;
+        coordinateComments = newComments;
+        updateCoordinateList();
+        updateCoordinateSelects();
+        calculateCoordinates();
+        drawGraph();
     }
 
     function calculateCoordinates() {
@@ -310,11 +411,25 @@
     }
 
     function updateCoordinateList() {
+        // 텍스트박스에 현재 좌표들을 주석과 함께 표시
+        var textarea = document.getElementById('coordinateInput');
+        var coordinateLines = Object.entries(userCoordinates).map(function([name, coord]) {
+            var comment = coordinateComments[name];
+            if (comment) {
+                return `${name}:${coord.x},${coord.y};${comment}`;
+            }
+            return `${name}:${coord.x},${coord.y}`;
+        });
+        textarea.value = coordinateLines.join('\n');
+
+        // 좌표 목록도 표시 (계산된 값 포함)
         var list = document.getElementById('coordinateList');
-        list.innerHTML = '좌표 목록: ' + 
+        list.innerHTML = '좌표 목록: ' +
             Object.entries(userCoordinates)
                 .map(function([name, coord], index) {
-                    return `${index + 1}. ${name}(${coord.x}, ${coord.y})`;
+                    var calc = calculatedCoordinates[name];
+                    var calcStr = calc ? ` = (${calc.x.toFixed(2)}, ${calc.y.toFixed(2)})` : '';
+                    return `${index + 1}. ${name}(${coord.x}, ${coord.y})${calcStr}`;
                 })
                 .join('<br>');
     }
@@ -362,68 +477,184 @@
     }
 
     function updateCoordinateSelects() {
-        var startSelect = document.getElementById('startPoint');
-        var endSelect = document.getElementById('endPoint');
-        startSelect.innerHTML = '';
-        endSelect.innerHTML = '';
-        Object.keys(userCoordinates).forEach(function(name) {
-            startSelect.add(new Option(name, name));
-            endSelect.add(new Option(name, name));
-        });
+        // 더 이상 select 박스를 사용하지 않음
     }
 
-    function addLine() {
-        var start = document.getElementById('startPoint').value;
-        var end = document.getElementById('endPoint').value;
-        if (start && end) {
-            lines.push({start: start, end: end});
-            updateLineList();
-            drawGraph();
-        } else {
-            alert('시작점과 끝점을 모두 선택해주세요.');
+    function addLines() {
+        var input = document.getElementById('lineInput').value.trim();
+        if (!input) {
+            alert('선 정보를 입력해주세요.');
+            return;
         }
+
+        var inputLines = input.split('\n');
+        var newLines = [];
+        var newLineGroups = [];
+        var errors = [];
+
+        inputLines.forEach(function(line, index) {
+            var trimmedLine = line.trim();
+            if (!trimmedLine) return; // 빈 줄 무시
+
+            // 세미콜론으로 주석 분리
+            var commentIndex = trimmedLine.indexOf(';');
+            var comment = '';
+            var codePart = trimmedLine;
+
+            if (commentIndex !== -1) {
+                comment = trimmedLine.substring(commentIndex + 1).trim();
+                codePart = trimmedLine.substring(0, commentIndex).trim();
+            }
+
+            if (!codePart) return; // 주석만 있는 줄 무시
+
+            var points = codePart.split(',').map(p => p.trim()).filter(p => p !== '');
+
+            if (points.length < 2) {
+                errors.push(`${index + 1}번째 줄: 최소 2개 이상의 점을 입력해주세요.`);
+                return;
+            }
+
+            // 존재하지 않는 좌표 확인
+            var invalidPoints = points.filter(p => !userCoordinates.hasOwnProperty(p));
+            if (invalidPoints.length > 0) {
+                errors.push(`${index + 1}번째 줄: 존재하지 않는 좌표 - ${invalidPoints.join(', ')}`);
+                return;
+            }
+
+            // 선 그룹 저장
+            newLineGroups.push({ points: points, comment: comment });
+
+            // 연속된 점들을 선으로 변환
+            for (var i = 0; i < points.length - 1; i++) {
+                newLines.push({ start: points[i], end: points[i + 1] });
+            }
+        });
+
+        if (errors.length > 0) {
+            alert('오류:\n' + errors.join('\n'));
+            return;
+        }
+
+        lines = newLines;
+        lineGroups = newLineGroups;
+        updateLineList();
+        drawGraph();
     }
 
     function updateLineList() {
+        // lineGroups를 텍스트박스에 주석과 함께 표시
+        var textarea = document.getElementById('lineInput');
+        var lineTexts = lineGroups.map(function(group) {
+            if (group.comment) {
+                return `${group.points.join(',')};${group.comment}`;
+            }
+            return group.points.join(',');
+        });
+        textarea.value = lineTexts.join('\n');
+
+        // 선 목록도 표시
         var list = document.getElementById('lineList');
-        list.innerHTML = '선 목록: ' + 
-            lines.map(function(line, index) { 
+        list.innerHTML = '선 목록: ' +
+            lines.map(function(line, index) {
                 return `${index + 1}. ${line.start} -> ${line.end}`;
             }).join('<br>');
     }
 
-    function addDimensionLine() {
-        var type = document.getElementById('dimtype').value;
-        var direction = parseInt(document.getElementById('dimdirection').value);
-        var pointsInput = document.getElementById('dimpntlist').value.trim();
-
-        var points = pointsInput.split(',').map(p => p.trim()).filter(p => p !== '');
-
-        if (points.length < 2) {
-            alert('최소 2개 이상의 점을 입력해주세요.');
+    function addDimensionLines() {
+        var input = document.getElementById('dimInput').value.trim();
+        if (!input) {
+            alert('치수선 정보를 입력해주세요.');
             return;
         }
 
-        if (!points.every(point => userCoordinates.hasOwnProperty(point))) {
-            alert('입력한 점 중 존재하지 않는 좌표가 있습니다.');
-            return;
-        }
+        var inputLines = input.split('\n');
+        var newDimensionLines = [];
+        var errors = [];
+        var validTypes = ['HDIM', 'VDIM', 'ADIM'];
 
-        dimensionLines.push({
-            type: type,
-            points: points,
-            direction: direction
+        inputLines.forEach(function(line, index) {
+            var trimmedLine = line.trim();
+            if (!trimmedLine) return; // 빈 줄 무시
+
+            // 세미콜론으로 주석 분리
+            var commentIndex = trimmedLine.indexOf(';');
+            var comment = '';
+            var codePart = trimmedLine;
+
+            if (commentIndex !== -1) {
+                comment = trimmedLine.substring(commentIndex + 1).trim();
+                codePart = trimmedLine.substring(0, commentIndex).trim();
+            }
+
+            if (!codePart) return; // 주석만 있는 줄 무시
+
+            var parts = codePart.split(',').map(p => p.trim());
+
+            if (parts.length < 4) {
+                errors.push(`${index + 1}번째 줄: 형식 오류 (타입,방향,점1,점2,... 형식으로 입력)`);
+                return;
+            }
+
+            var type = parts[0].toUpperCase();
+            var direction = parseInt(parts[1]);
+            var points = parts.slice(2).filter(p => p !== '');
+
+            if (!validTypes.includes(type)) {
+                errors.push(`${index + 1}번째 줄: 유효하지 않은 타입 '${parts[0]}' (HDIM, VDIM, ADIM 중 선택)`);
+                return;
+            }
+
+            if (direction !== 1 && direction !== -1) {
+                errors.push(`${index + 1}번째 줄: 방향은 1 또는 -1이어야 합니다.`);
+                return;
+            }
+
+            if (points.length < 2) {
+                errors.push(`${index + 1}번째 줄: 최소 2개 이상의 점을 입력해주세요.`);
+                return;
+            }
+
+            var invalidPoints = points.filter(p => !userCoordinates.hasOwnProperty(p));
+            if (invalidPoints.length > 0) {
+                errors.push(`${index + 1}번째 줄: 존재하지 않는 좌표 - ${invalidPoints.join(', ')}`);
+                return;
+            }
+
+            newDimensionLines.push({
+                type: type,
+                points: points,
+                direction: direction,
+                comment: comment
+            });
         });
 
+        if (errors.length > 0) {
+            alert('오류:\n' + errors.join('\n'));
+            return;
+        }
+
+        dimensionLines = newDimensionLines;
         updateDimensionLineList();
         drawGraph();
-        document.getElementById('dimpntlist').value = '';
     }
 
     function updateDimensionLineList() {
+        // 텍스트박스에 현재 치수선들을 주석과 함께 표시
+        var textarea = document.getElementById('dimInput');
+        var dimLines = dimensionLines.map(function(line) {
+            var base = `${line.type},${line.direction},${line.points.join(',')}`;
+            if (line.comment) {
+                return `${base};${line.comment}`;
+            }
+            return base;
+        });
+        textarea.value = dimLines.join('\n');
+
+        // 치수선 목록도 표시
         var list = document.getElementById('dimList');
-        list.innerHTML = '치수선 목록: ' + 
-            dimensionLines.map(function(line, index) { 
+        list.innerHTML = '치수선 목록: ' +
+            dimensionLines.map(function(line, index) {
                 return `${index + 1}. ${dimensions[line.type]}: ${line.points.join(' -> ')} (${line.direction > 0 ? '정방향' : '역방향'})`;
             }).join('<br>');
     }
@@ -497,7 +728,15 @@
     function drawCoordinates() {
         gContainer.selectAll(".coordinate-group").remove();
 
-        var currentZoom = zoom.transform ? zoom.transform.k : 1;
+        var dimScale = parseFloat(document.getElementById('dimScaleInput').value) || 1;
+        var defaultTextHeight = 2.5; // 도면 단위 기본값
+        var textHeightInUnits = defaultTextHeight * dimScale;
+
+        // 도면 단위를 픽셀로 변환
+        var pixelsPerUnit = Math.abs(xScale(1) - xScale(0));
+        var fontSize = textHeightInUnits * pixelsPerUnit;
+        var pointRadius = 0.5 * dimScale * pixelsPerUnit; // 직경 1 * dimScale
+        var textOffset = textHeightInUnits * pixelsPerUnit * 0.8;
 
         Object.entries(calculatedCoordinates).forEach(function([name, coord]) {
             if (!isNaN(coord.x) && !isNaN(coord.y)) {
@@ -505,21 +744,18 @@
                     .attr("class", "coordinate-group")
                     .attr("transform", `translate(${xScale(coord.x)},${yScale(coord.y)})`);
 
-                var radius = 5 / Math.max(currentZoom, 0.1);
                 point.append("circle")
-                    .attr("r", isNaN(radius) ? 5 : radius)
+                    .attr("r", pointRadius)
                     .attr("fill", "black")
                     .attr("class", "coordinate-point")
                     .style("vector-effect", "non-scaling-stroke");
 
-                var fontSize = 12 / Math.max(currentZoom, 0.1);
-                var dy = -10 / Math.max(currentZoom, 0.1);
                 point.append("text")
-                    .attr("dy", isNaN(dy) ? "-10px" : dy + "px")
+                    .attr("dy", -textOffset + "px")
                     .text(name)
                     .attr("class", "coordinate-label")
                     .style("text-anchor", "middle")
-                    .style("font-size", isNaN(fontSize) ? "12px" : fontSize + "px");
+                    .style("font-size", fontSize + "px");
             }
         });
     }
@@ -549,7 +785,8 @@
     gContainer.selectAll(".dimension-line, .dimension-text").remove();
 
     var currentZoom = zoom.transform ? zoom.transform.k : 1;
-    var defaultOffset = 1.5;
+    var defaultOffset = 20;
+    var dimScale = parseFloat(document.getElementById('dimScaleInput').value) || 1;
 
     dimensionLines.forEach(function(line) {
         if (!Array.isArray(line.points) || line.points.length < 2) {
@@ -564,7 +801,7 @@
         }
 
         var direction = typeof line.direction === 'number' ? line.direction : 1;
-        var offset = defaultOffset;
+        var offset = defaultOffset * dimScale;
 
         if (line.type === 'HDIM') {
             drawHorizontalDimension(points, direction, offset);
@@ -595,10 +832,14 @@
     }
 
     function drawEndpoint(group, x, y) {
+        var dimScale = parseFloat(document.getElementById('dimScaleInput').value) || 1;
+        var pixelsPerUnit = Math.abs(xScale(1) - xScale(0));
+        var radius = 0.5 * dimScale * pixelsPerUnit; // 직경 1 * dimScale
+
         group.append("circle")
             .attr("cx", x)
             .attr("cy", y)
-            .attr("r", 3)
+            .attr("r", radius)
             .attr("fill", "black");
     }
 
@@ -611,22 +852,28 @@
     var y = points[0].y;
     var textY = y + offset * direction;
 
-    // 현재 줌 레벨 계산
-    var currentZoom = zoom.transform ? zoom.transform.k : 1;
+    // 도면 단위로 텍스트 크기 계산
+    var dimScale = parseFloat(document.getElementById('dimScaleInput').value) || 1;
+    var defaultTextHeight = 2.5;
+    var textHeightInUnits = defaultTextHeight * dimScale;
+    var pixelsPerUnit = Math.abs(xScale(1) - xScale(0));
+    var fontSize = textHeightInUnits * pixelsPerUnit;
 
-    // 줌 레벨에 따른 조정
-    var strokeWidth = 1 / Math.max(currentZoom, 0.1);
-    var fontSize = 12;
+    var strokeWidth = 1;
 
     // 모든 점의 x 좌표 수집
     var xCoords = points.map(p => p.x);
 
-    // 각 점에서 치수선까지 수직선 그리기
+    // 치수보조선 시작 오프셋 (원점에서 10 * dimScale 떨어진 곳에서 시작)
+    var extensionGap = 10 * dimScale;
+    var extensionStartY = y + extensionGap * direction;
+
+    // 각 점에서 치수선까지 수직선 그리기 (원점에서 gap만큼 떨어진 곳에서 시작)
     xCoords.forEach(x => {
         gContainer.append("line")
             .attr("class", "dimension-line")
             .attr("x1", xScale(x))
-            .attr("y1", yScale(y))
+            .attr("y1", yScale(extensionStartY))
             .attr("x2", xScale(x))
             .attr("y2", yScale(textY))
             .attr("stroke", "red")
@@ -658,7 +905,7 @@
             .attr("x", xScale(midX))
             .attr("y", yScale(textY))
             .attr("dy", "-0.5em")
-            .text(Math.abs(x2 - x1).toFixed(2))
+            .text(Math.round(Math.abs(x2 - x1)))
             .attr("text-anchor", "middle")
             .attr("fill", "black")
             .style("font-size", `${fontSize}px`);
@@ -679,19 +926,29 @@ function drawVerticalDimension(points, direction, offset) {
     var x = points[0].x;
     var textX = x + offset * direction;
 
+    // 도면 단위로 텍스트 크기 계산
+    var dimScale = parseFloat(document.getElementById('dimScaleInput').value) || 1;
+    var defaultTextHeight = 2.5;
+    var textHeightInUnits = defaultTextHeight * dimScale;
+    var pixelsPerUnit = Math.abs(xScale(1) - xScale(0));
+    var fontSize = textHeightInUnits * pixelsPerUnit;
+
     var strokeWidth = 1;
-    var fontSize = 12;
 
     // 모든 점의 y 좌표 수집
     var yCoords = points.map(p => p.y);
 
     var scaledTextX = xScale(textX);
 
-    // 각 점에서 치수선까지 수평선 그리기
+    // 치수보조선 시작 오프셋 (원점에서 10 * dimScale 떨어진 곳에서 시작)
+    var extensionGap = 10 * dimScale;
+    var extensionStartX = x + extensionGap * direction;
+
+    // 각 점에서 치수선까지 수평선 그리기 (원점에서 gap만큼 떨어진 곳에서 시작)
     yCoords.forEach(y => {
         gContainer.append("line")
             .attr("class", "dimension-line")
-            .attr("x1", xScale(x))
+            .attr("x1", xScale(extensionStartX))
             .attr("y1", yScale(y))
             .attr("x2", scaledTextX)
             .attr("y2", yScale(y))
@@ -725,7 +982,7 @@ function drawVerticalDimension(points, direction, offset) {
             .attr("x", scaledTextX)
             .attr("y", scaledMidY)
             .attr("transform", `rotate(-90, ${scaledTextX}, ${scaledMidY}) translate(0, ${direction > 0 ? -5 : 5})`)
-            .text(Math.abs(y2 - y1).toFixed(2))
+            .text(Math.round(Math.abs(y2 - y1)))
             .attr("text-anchor", "middle")
             .attr("dominant-baseline", "middle")
             .attr("fill", "black")
@@ -765,11 +1022,26 @@ function drawAngularDimension(points, direction, offset) {
     var dimP1 = { x: p1.x + offsetX, y: p1.y + offsetY };
     var dimP2 = { x: p2.x + offsetX, y: p2.y + offsetY };
 
-    var strokeWidth = 1;
-    var fontSize = 12;
+    // 도면 단위로 텍스트 크기 계산
+    var dimScale = parseFloat(document.getElementById('dimScaleInput').value) || 1;
+    var defaultTextHeight = 2.5;
+    var textHeightInUnits = defaultTextHeight * dimScale;
+    var pixelsPerUnit = Math.abs(xScale(1) - xScale(0));
+    var fontSize = textHeightInUnits * pixelsPerUnit;
 
-    // 원점에서 치수선까지 연결선 그리기
-    [{ from: p1, to: dimP1 }, { from: p2, to: dimP2 }].forEach(function(line) {
+    var strokeWidth = 1;
+
+    // 치수보조선 시작 오프셋 (원점에서 10 * dimScale 떨어진 곳에서 시작)
+    var extensionGap = 10 * dimScale;
+    var gapX = extensionGap * direction * Math.cos(perpAngle);
+    var gapY = extensionGap * direction * Math.sin(perpAngle);
+
+    // 치수보조선 시작점 (원점에서 gap만큼 떨어진 곳)
+    var extStart1 = { x: p1.x + gapX, y: p1.y + gapY };
+    var extStart2 = { x: p2.x + gapX, y: p2.y + gapY };
+
+    // 원점에서 치수선까지 연결선 그리기 (gap만큼 떨어진 곳에서 시작)
+    [{ from: extStart1, to: dimP1 }, { from: extStart2, to: dimP2 }].forEach(function(line) {
         gContainer.append("line")
             .attr("class", "dimension-line")
             .attr("x1", xScale(line.from.x))
@@ -810,7 +1082,7 @@ function drawAngularDimension(points, direction, offset) {
         .attr("y", yScale(textY))
         .attr("transform", `rotate(${-textAngle}, ${xScale(textX)}, ${yScale(textY)})`)
         .attr("dy", "-0.5em")
-        .text(distance.toFixed(2))
+        .text(Math.round(distance))
         .attr("text-anchor", "middle")
         .attr("fill", "black")
         .style("font-size", `${fontSize}px`);
@@ -859,34 +1131,32 @@ function autoZoom() {
     var svgBounds = svg.node().getBoundingClientRect();
     var width = svgBounds.width;
     var height = svgBounds.height;
+    var margin = 40; // 여백
 
-    console.log("domain",domain);
-    console.log("svgBounds",svgBounds);
-    
     var xRange = domain.x[1] - domain.x[0];
     var yRange = domain.y[1] - domain.y[0];
-    
-    console.log("xRange",xRange);
-    console.log("yRange",yRange);   
-    var scale = Math.min(width / xRange, height / yRange) * 0.8;
-    scale = Math.max(scale, 0.1);
-    scale=0.5;
-    // alert(scale);
+
+    // 바운딩박스에 맞게 스케일 계산
+    var scaleX = (width - margin * 2) / (xScale(domain.x[1]) - xScale(domain.x[0]));
+    var scaleY = (height - margin * 2) / (yScale(domain.y[0]) - yScale(domain.y[1]));
+    var scale = Math.min(scaleX, scaleY);
+    scale = Math.max(scale, 0.001); // 최소 스케일 보장
 
     var centerX = (domain.x[0] + domain.x[1]) / 2;
     var centerY = (domain.y[0] + domain.y[1]) / 2;
 
-    // var transform = d3.zoomIdentity
-    //     .translate(width / 2, height / 2)
-    //     .scale(scale)
-    //     .translate(-xScale(centerX), -yScale(centerY));
-
-        var transform = d3.zoomIdentity
+    var transform = d3.zoomIdentity
         .translate(width / 2, height / 2)
         .scale(scale)
         .translate(-xScale(centerX), -yScale(centerY));
 
     svg.transition().duration(750).call(zoom.transform, transform);
+}
+
+function setScale() {
+    if (svg && zoom) {
+        drawGraph();
+    }
 }
 
 
@@ -902,8 +1172,10 @@ function printGraphInfo() {
         variables: variables,
         variableComments: variableComments,
         coordinates: userCoordinates,
+        coordinateComments: coordinateComments,
         calculatedCoordinates: calculatedCoordinates,
         lines: lines,
+        lineGroups: lineGroups,
         dimensionLines: dimensionLines
     };
 
@@ -911,16 +1183,16 @@ function printGraphInfo() {
     document.getElementById('graphInfo').value = jsonString;
 }
 
-function loadExampleData() {
+function loadExampleData(silent) {
     var exampleData = {
         "variables": {
-            "H1": 2,
-            "H2": 3,
-            "H3": 1.2,
-            "B1": 2.5,
-            "B2": 2,
-            "B3": 1.2,
-            "B4": 0.5
+            "H1": 2000,
+            "H2": 3000,
+            "H3": 1200,
+            "B1": 2500,
+            "B2": 2000,
+            "B3": 1200,
+            "B4": 500
         },
         "variableComments": {
             "H1": "흉벽높이",
@@ -945,15 +1217,15 @@ function loadExampleData() {
         },
         "calculatedCoordinates": {
             "p1": { "x": 0, "y": 0 },
-            "p2": { "x": 0, "y": -2 },
-            "p3": { "x": 1.5, "y": -2 },
-            "p4": { "x": 1.5, "y": -5 },
-            "p5": { "x": 2.7, "y": -5 },
-            "p6": { "x": 2.7, "y": -6.2 },
-            "p7": { "x": -3, "y": -6.2 },
-            "p8": { "x": -3, "y": -5 },
-            "p9": { "x": -0.5, "y": -5 },
-            "p10": { "x": -0.5, "y": 0 }
+            "p2": { "x": 0, "y": -2000 },
+            "p3": { "x": 1500, "y": -2000 },
+            "p4": { "x": 1500, "y": -5000 },
+            "p5": { "x": 2700, "y": -5000 },
+            "p6": { "x": 2700, "y": -6200 },
+            "p7": { "x": -3000, "y": -6200 },
+            "p8": { "x": -3000, "y": -5000 },
+            "p9": { "x": -500, "y": -5000 },
+            "p10": { "x": -500, "y": 0 }
         },
         "lines": [
             { "start": "p1", "end": "p2" },
@@ -982,10 +1254,10 @@ function loadExampleData() {
     document.getElementById('graphInfo').value = JSON.stringify(exampleData, null, 2);
 
     // 데이터 읽기 함수 호출
-    readGraphInfo();
+    readGraphInfo(silent);
 }
 
-function readGraphInfo() {
+function readGraphInfo(silent) {
     try {
         var jsonString = document.getElementById('graphInfo').value;
         var graphInfo = JSON.parse(jsonString);
@@ -993,9 +1265,30 @@ function readGraphInfo() {
         variables = graphInfo.variables || {};
         variableComments = graphInfo.variableComments || {};
         userCoordinates = graphInfo.coordinates || {};
+        coordinateComments = graphInfo.coordinateComments || {};
         calculatedCoordinates = graphInfo.calculatedCoordinates || {};
         lines = graphInfo.lines || [];
         dimensionLines = graphInfo.dimensionLines || [];
+
+        // lineGroups 처리: 있으면 사용, 없으면 lines에서 생성
+        if (graphInfo.lineGroups && graphInfo.lineGroups.length > 0) {
+            lineGroups = graphInfo.lineGroups;
+        } else {
+            // 기존 lines 배열에서 lineGroups 생성
+            lineGroups = [];
+            if (lines.length > 0) {
+                var currentGroup = { points: [lines[0].start, lines[0].end], comment: '' };
+                for (var i = 1; i < lines.length; i++) {
+                    if (lines[i].start === currentGroup.points[currentGroup.points.length - 1]) {
+                        currentGroup.points.push(lines[i].end);
+                    } else {
+                        lineGroups.push(currentGroup);
+                        currentGroup = { points: [lines[i].start, lines[i].end], comment: '' };
+                    }
+                }
+                lineGroups.push(currentGroup);
+            }
+        }
 
         updateVariableList();
         updateCoordinateList();
@@ -1005,34 +1298,36 @@ function readGraphInfo() {
         calculateCoordinates();
         drawGraph();
 
-        alert('JSON 데이터를 성공적으로 읽어 적용했습니다.');
+        if (!silent) {
+            alert('JSON 데이터를 성공적으로 읽어 적용했습니다.');
+        }
     } catch (error) {
         console.error('JSON 파싱 에러:', error);
-        alert('JSON 데이터를 읽는 중 오류가 발생했습니다. 올바른 형식인지 확인해주세요.');
+        if (!silent) {
+            alert('JSON 데이터를 읽는 중 오류가 발생했습니다. 올바른 형식인지 확인해주세요.');
+        }
     }
 }
 
 // 전역 객체에 함수 할당
 window.addVariables = addVariables;
 window.updateVariableList = updateVariableList;
-window.addCoordinate = addCoordinate;
+window.addCoordinates = addCoordinates;
 window.updateCoordinateList = updateCoordinateList;
 window.updateCoordinateSelects = updateCoordinateSelects;
-window.addLine = addLine;
-window.addDimensionLine = addDimensionLine;
+window.addLines = addLines;
+window.addDimensionLines = addDimensionLines;
 window.updateLineList = updateLineList;
 window.drawGraph = drawGraph;
 window.toggleLabels = toggleLabels;
+window.setScale = setScale;
 window.printGraphInfo = printGraphInfo;
 window.readGraphInfo = readGraphInfo;
 window.loadExampleData = loadExampleData;
 
 // 초기화 함수
 function init() {
-    updateVariableList();
-    updateCoordinateList();
-    updateCoordinateSelects();
-    updateLineList();
+    loadExampleData(true);
 }
 
 // 페이지 로드 시 초기화
