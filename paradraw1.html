@@ -203,9 +203,15 @@
 
         <h2>데이터 관리</h2>
         <div class="button-group">
-            <button onclick="window.printGraphInfo()">정보 출력</button>
-            <button onclick="window.readGraphInfo()">데이터 읽기</button>
+            <button onclick="window.printGraphInfo()">JSON보기</button>
+            <button onclick="window.printTextInfo()">TEXT보기</button>
+            <button onclick="window.readGraphInfo()">데이터 적용</button>
             <button onclick="window.loadExampleData()">예제 로드</button>
+        </div>
+        <div class="button-group">
+            <button onclick="window.downloadData()">다운로드</button>
+            <button onclick="document.getElementById('fileInput').click()">업로드</button>
+            <input type="file" id="fileInput" accept=".json,.txt" style="display:none" onchange="window.uploadData(event)">
         </div>
         <textarea id="graphInfo" rows="6" placeholder="JSON 형식의 그래프 정보"></textarea>
     </div>
@@ -1183,6 +1189,87 @@ function printGraphInfo() {
     document.getElementById('graphInfo').value = jsonString;
 }
 
+function printTextInfo() {
+    var textLines = [];
+
+    // 변수 정보
+    textLines.push('=== 변수 ===');
+    Object.entries(variables).forEach(function([name, value]) {
+        var comment = variableComments[name] ? ' ; ' + variableComments[name] : '';
+        textLines.push(name + ' = ' + value + comment);
+    });
+
+    // 좌표 정보
+    textLines.push('');
+    textLines.push('=== 좌표 ===');
+    Object.entries(userCoordinates).forEach(function([name, coord]) {
+        var calc = calculatedCoordinates[name];
+        var calcStr = calc ? ' => (' + calc.x + ', ' + calc.y + ')' : '';
+        var comment = coordinateComments[name] ? ' ; ' + coordinateComments[name] : '';
+        textLines.push(name + ': ' + coord.x + ', ' + coord.y + calcStr + comment);
+    });
+
+    // 선 정보
+    textLines.push('');
+    textLines.push('=== 선 ===');
+    lineGroups.forEach(function(group, index) {
+        var comment = group.comment ? ' ; ' + group.comment : '';
+        textLines.push((index + 1) + '. ' + group.points.join(' -> ') + comment);
+    });
+
+    // 치수선 정보
+    textLines.push('');
+    textLines.push('=== 치수선 ===');
+    dimensionLines.forEach(function(dim, index) {
+        var typeNames = { 'HDIM': '수평', 'VDIM': '수직', 'ADIM': '경사' };
+        var typeName = typeNames[dim.type] || dim.type;
+        var dirStr = dim.direction > 0 ? '정방향' : '역방향';
+        var comment = dim.comment ? ' ; ' + dim.comment : '';
+        textLines.push((index + 1) + '. [' + typeName + '/' + dirStr + '] ' + dim.points.join(' -> ') + comment);
+    });
+
+    document.getElementById('graphInfo').value = textLines.join('\n');
+}
+
+function downloadData() {
+    var content = document.getElementById('graphInfo').value.trim();
+    if (!content) {
+        alert('다운로드할 데이터가 없습니다. JSON보기 또는 TEXT보기를 먼저 클릭하세요.');
+        return;
+    }
+
+    var isJson = content.startsWith('{');
+    var extension = isJson ? 'json' : 'txt';
+    var mimeType = isJson ? 'application/json' : 'text/plain';
+    var filename = 'paradraw_data.' + extension;
+
+    var blob = new Blob([content], { type: mimeType + ';charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function uploadData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('graphInfo').value = e.target.result;
+        readGraphInfo();
+    };
+    reader.readAsText(file);
+
+    // 같은 파일을 다시 선택할 수 있도록 초기화
+    event.target.value = '';
+}
+
 function loadExampleData(silent) {
     var exampleData = {
         "variables": {
@@ -1258,8 +1345,18 @@ function loadExampleData(silent) {
 }
 
 function readGraphInfo(silent) {
+    var inputText = document.getElementById('graphInfo').value.trim();
+
+    // JSON인지 TEXT인지 판단 (첫 문자가 {이면 JSON)
+    if (inputText.startsWith('{')) {
+        readJsonData(inputText, silent);
+    } else {
+        readTextData(inputText, silent);
+    }
+}
+
+function readJsonData(jsonString, silent) {
     try {
-        var jsonString = document.getElementById('graphInfo').value;
         var graphInfo = JSON.parse(jsonString);
 
         variables = graphInfo.variables || {};
@@ -1290,22 +1387,110 @@ function readGraphInfo(silent) {
             }
         }
 
-        updateVariableList();
-        updateCoordinateList();
-        updateCoordinateSelects();
-        updateLineList();
-        updateDimensionLineList();
-        calculateCoordinates();
-        drawGraph();
-
-        if (!silent) {
-            alert('JSON 데이터를 성공적으로 읽어 적용했습니다.');
-        }
+        applyLoadedData(silent, 'JSON');
     } catch (error) {
         console.error('JSON 파싱 에러:', error);
         if (!silent) {
             alert('JSON 데이터를 읽는 중 오류가 발생했습니다. 올바른 형식인지 확인해주세요.');
         }
+    }
+}
+
+function readTextData(textContent, silent) {
+    try {
+        var newVariables = {};
+        var newVariableComments = {};
+        var newCoordinates = {};
+        var newCoordinateComments = {};
+        var newLineGroups = [];
+        var newDimensionLines = [];
+
+        var currentSection = '';
+        var lines_text = textContent.split('\n');
+
+        lines_text.forEach(function(line) {
+            var trimmedLine = line.trim();
+            if (!trimmedLine) return;
+
+            // 섹션 헤더 확인 (치수선을 선보다 먼저 체크해야 함)
+            if (trimmedLine.startsWith('===')) {
+                if (trimmedLine.includes('변수')) currentSection = 'variables';
+                else if (trimmedLine.includes('좌표')) currentSection = 'coordinates';
+                else if (trimmedLine.includes('치수선')) currentSection = 'dimensions';
+                else if (trimmedLine.includes('선')) currentSection = 'lines';
+                return;
+            }
+
+            // 섹션별 파싱
+            if (currentSection === 'variables') {
+                // 형식: name = value ; comment
+                var match = trimmedLine.match(/^(\w+)\s*=\s*([^\s;]+)\s*(?:;\s*(.*))?$/);
+                if (match) {
+                    newVariables[match[1]] = parseFloat(match[2]);
+                    newVariableComments[match[1]] = match[3] || '';
+                }
+            } else if (currentSection === 'coordinates') {
+                // 형식: name: x, y => (calcX, calcY) ; comment
+                var match = trimmedLine.match(/^(\w+):\s*([^,]+),\s*([^=>;]+)(?:\s*=>.*)?(?:\s*;\s*(.*))?$/);
+                if (match) {
+                    newCoordinates[match[1]] = { x: match[2].trim(), y: match[3].trim() };
+                    newCoordinateComments[match[1]] = match[4] || '';
+                }
+            } else if (currentSection === 'lines') {
+                // 형식: 1. p1 -> p2 -> p3 ; comment
+                var match = trimmedLine.match(/^\d+\.\s*(.+?)(?:\s*;\s*(.*))?$/);
+                if (match) {
+                    var points = match[1].split('->').map(p => p.trim());
+                    newLineGroups.push({ points: points, comment: match[2] || '' });
+                }
+            } else if (currentSection === 'dimensions') {
+                // 형식: 1. [수평/정방향] p1 -> p2 ; comment
+                var match = trimmedLine.match(/^\d+\.\s*\[([^\]\/]+)\/([^\]]+)\]\s*(.+?)(?:\s*;\s*(.*))?$/);
+                if (match) {
+                    var typeMap = { '수평': 'HDIM', '수직': 'VDIM', '경사': 'ADIM' };
+                    var type = typeMap[match[1]] || 'HDIM';
+                    var direction = match[2] === '정방향' ? 1 : -1;
+                    var points = match[3].split('->').map(p => p.trim());
+                    newDimensionLines.push({ type: type, direction: direction, points: points, comment: match[4] || '' });
+                }
+            }
+        });
+
+        variables = newVariables;
+        variableComments = newVariableComments;
+        userCoordinates = newCoordinates;
+        coordinateComments = newCoordinateComments;
+        lineGroups = newLineGroups;
+        dimensionLines = newDimensionLines;
+
+        // lineGroups에서 lines 생성
+        lines = [];
+        lineGroups.forEach(function(group) {
+            for (var i = 0; i < group.points.length - 1; i++) {
+                lines.push({ start: group.points[i], end: group.points[i + 1] });
+            }
+        });
+
+        applyLoadedData(silent, 'TEXT');
+    } catch (error) {
+        console.error('TEXT 파싱 에러:', error);
+        if (!silent) {
+            alert('TEXT 데이터를 읽는 중 오류가 발생했습니다. 올바른 형식인지 확인해주세요.');
+        }
+    }
+}
+
+function applyLoadedData(silent, format) {
+    updateVariableList();
+    updateCoordinateList();
+    updateCoordinateSelects();
+    updateLineList();
+    updateDimensionLineList();
+    calculateCoordinates();
+    drawGraph();
+
+    if (!silent) {
+        alert(format + ' 데이터를 성공적으로 읽어 적용했습니다.');
     }
 }
 
@@ -1322,6 +1507,9 @@ window.drawGraph = drawGraph;
 window.toggleLabels = toggleLabels;
 window.setScale = setScale;
 window.printGraphInfo = printGraphInfo;
+window.printTextInfo = printTextInfo;
+window.downloadData = downloadData;
+window.uploadData = uploadData;
 window.readGraphInfo = readGraphInfo;
 window.loadExampleData = loadExampleData;
 
