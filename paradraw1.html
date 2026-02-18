@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>좌표 그래프 생성기</title>
+    <title>ParaDraw </title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
     <style>
         html, body {
@@ -35,7 +35,7 @@
             margin: 5px;
             padding: 5px;
         }
-        #variableList, #coordinateList, #lineList {
+        #parseResult {
             margin-top: 10px;
         }
         .axis line, .axis path {
@@ -152,7 +152,7 @@
             flex: 1;
             min-width: 80px;
         }
-        #variableList, #coordinateList, #lineList, #dimList {
+        #parseResult {
             font-size: 12px;
             color: #666;
             margin: 5px 0 10px 0;
@@ -177,35 +177,25 @@
                     치수축척: <input type="number" id="dimScaleInput" value="100" min="0.1" step="0.1" style="width: 60px;" onchange="window.setScale()">
                 </div>
             </div>
-            <button onclick="window.drawGraph()">도면그리기</button>
+            <button onclick="window.applyAndDraw()">도면그리기</button>
         </div>
     </div>
     <div class="right">
-        <h2>변수 입력</h2>
-        <textarea id="variableInput" rows="5" placeholder="변수명=값 형식으로 한 줄에 하나씩 입력&#10;; 뒤에 주석 가능&#10;예시:&#10;H1=2;높이1&#10;H2=3;높이2"></textarea>
-        <button onclick="window.addVariables()">변수 적용</button>
-        <div id="variableList"></div>
-
-        <h2>좌표 계산 수식</h2>
-        <textarea id="coordinateInput" rows="6" placeholder="점이름:x좌표,y좌표 형식&#10;; 뒤에 주석 가능&#10;예시:&#10;p1:0,0;원점&#10;p2:p1.x,p1.y+H1"></textarea>
-        <button onclick="window.addCoordinates()">좌표 적용</button>
-        <div id="coordinateList"></div>
-
-        <h2>선 정보 입력</h2>
-        <textarea id="lineInput" rows="4" placeholder="점들을 콤마로 연결&#10;예시: p1,p2,p3;외벽"></textarea>
-        <button onclick="window.addLines()">선 적용</button>
-        <div id="lineList"></div>
-
-        <h2>치수선 정보 입력</h2>
-        <textarea id="dimInput" rows="4" placeholder="타입,방향,점1,점2,...&#10;예시: HDIM,1,p1,p2;폭"></textarea>
-        <button onclick="window.addDimensionLines()">치수선 적용</button>
-        <div id="dimList"></div>
+        <h2>입력</h2>
+        <textarea id="mainInput" rows="15" placeholder="변수: H1=2000;높이&#10;좌표: p1=0,0;원점&#10;      p2=p1.x,p1.y+H1&#10;반복: s[0-N]=i*100,i*200&#10;선:   line,p1,p2,p3;외벽&#10;순차: line,p1..p10&#10;치수: HDIM,1,p1,p2;폭"></textarea>
+        <div id="parseResult"></div>
 
         <h2>데이터 관리</h2>
         <div class="button-group">
             <button onclick="window.printGraphInfo()">JSON보기</button>
             <button onclick="window.printTextInfo()">TEXT보기</button>
             <button onclick="window.readGraphInfo()">데이터 적용</button>
+            <select id="exampleSelect" style="flex:1;min-width:80px;">
+                <option value="retaining">교대 단면</option>
+                <option value="sine">SIN 곡선</option>
+                <option value="circle">원 곡선</option>
+                <option value="heart">하트 곡선</option>
+            </select>
             <button onclick="window.loadExampleData()">예제 로드</button>
         </div>
         <div class="button-group">
@@ -234,165 +224,191 @@
     var zoom;
     var showLabels = true;
 
-    function addVariables() {
-        var input = document.getElementById('variableInput').value.trim();
-        if (!input) {
-            alert('변수를 입력해주세요.');
-            return;
-        }
-
-        var inputLines = input.split('\n');
-        var newVariables = {};
-        var newComments = {};
-        var errors = [];
-
-        inputLines.forEach(function(line, index) {
-            var originalLine = line.trim();
-            if (!originalLine) return; // 빈 줄 무시
-
-            // 세미콜론으로 분리하여 주석 추출
-            var commentIndex = originalLine.indexOf(';');
-            var comment = '';
-            var codePart = originalLine;
-
-            if (commentIndex !== -1) {
-                comment = originalLine.substring(commentIndex + 1).trim();
-                codePart = originalLine.substring(0, commentIndex).trim();
-            }
-
-            if (!codePart) return; // 주석만 있는 줄 무시
-
-            var parts = codePart.split('=');
-            if (parts.length !== 2) {
-                errors.push(`${index + 1}번째 줄: 형식 오류 (변수명=값 형식으로 입력)`);
-                return;
-            }
-
-            var name = parts[0].trim();
-            var value = parseFloat(parts[1].trim());
-
-            if (!name) {
-                errors.push(`${index + 1}번째 줄: 변수명이 비어있습니다.`);
-                return;
-            }
-
-            if (isNaN(value)) {
-                errors.push(`${index + 1}번째 줄: '${parts[1].trim()}'은(는) 올바른 숫자가 아닙니다.`);
-                return;
-            }
-
-            newVariables[name] = value;
-            newComments[name] = comment;
-        });
-
-        if (errors.length > 0) {
-            alert('오류:\n' + errors.join('\n'));
-            return;
-        }
-
-        // 기존 변수에 새 변수 병합
-        Object.assign(variables, newVariables);
-        Object.assign(variableComments, newComments);
-        updateVariableList();
-        calculateCoordinates();
-    }
-
-    function updateVariableList() {
-        // 텍스트박스에 현재 변수들을 주석과 함께 표시
-        var textarea = document.getElementById('variableInput');
-        var variableLines = Object.entries(variables).map(function([name, value]) {
-            var comment = variableComments[name];
-            if (comment) {
-                return `${name}=${value};${comment}`;
-            }
-            return `${name}=${value}`;
-        });
-        textarea.value = variableLines.join('\n');
-
-        // 변수 목록도 표시
-        var list = document.getElementById('variableList');
-        list.innerHTML = '변수 목록: ' +
-            Object.entries(variables)
-                .map(function([name, value], index) {
-                    return `${index + 1}. ${name} = ${value}`;
-                })
-                .join(', ');
-    }
-
-    function addCoordinates() {
-        var input = document.getElementById('coordinateInput').value.trim();
-        if (!input) {
-            alert('좌표를 입력해주세요.');
-            return;
-        }
-
-        var inputLines = input.split('\n');
-        var newCoordinates = {};
-        var newComments = {};
-        var errors = [];
-
-        inputLines.forEach(function(line, index) {
-            var trimmedLine = line.trim();
-            if (!trimmedLine) return; // 빈 줄 무시
-
-            // 세미콜론으로 주석 분리
-            var commentIndex = trimmedLine.indexOf(';');
-            var comment = '';
-            var codePart = trimmedLine;
-
-            if (commentIndex !== -1) {
-                comment = trimmedLine.substring(commentIndex + 1).trim();
-                codePart = trimmedLine.substring(0, commentIndex).trim();
-            }
-
-            if (!codePart) return; // 주석만 있는 줄 무시
-
-            // 형식: 점이름:x좌표수식,y좌표수식
-            var colonIndex = codePart.indexOf(':');
-            if (colonIndex === -1) {
-                errors.push(`${index + 1}번째 줄: 형식 오류 (점이름:x좌표수식,y좌표수식 형식으로 입력)`);
-                return;
-            }
-
-            var name = codePart.substring(0, colonIndex).trim();
-            var formulaPart = codePart.substring(colonIndex + 1).trim();
-
-            if (!name) {
-                errors.push(`${index + 1}번째 줄: 좌표 이름이 비어있습니다.`);
-                return;
-            }
-
-            // 첫 번째 콤마를 기준으로 x, y 분리
-            var commaIndex = formulaPart.indexOf(',');
-            if (commaIndex === -1) {
-                errors.push(`${index + 1}번째 줄: x좌표와 y좌표를 콤마로 구분해주세요.`);
-                return;
-            }
-
-            var xFormula = formulaPart.substring(0, commaIndex).trim();
-            var yFormula = formulaPart.substring(commaIndex + 1).trim();
-
-            if (!xFormula || !yFormula) {
-                errors.push(`${index + 1}번째 줄: x좌표 또는 y좌표 수식이 비어있습니다.`);
-                return;
-            }
-
-            newCoordinates[name] = { x: xFormula, y: yFormula };
-            newComments[name] = comment;
-        });
-
-        if (errors.length > 0) {
-            alert('오류:\n' + errors.join('\n'));
-            return;
-        }
-
-        // 기존 좌표를 새 좌표로 교체
-        userCoordinates = newCoordinates;
-        coordinateComments = newComments;
-        updateCoordinateList();
-        updateCoordinateSelects();
-        calculateCoordinates();
+    function applyAndDraw() {
+        parseAllInput();
         drawGraph();
+    }
+
+    function parseAllInput() {
+        var input = document.getElementById('mainInput').value.trim();
+
+        var newVariables = {};
+        var newVariableComments = {};
+        var coordLines = [];
+        var lineInputs = [];
+        var dimInputs = [];
+
+        if (input) {
+            input.split('\n').forEach(function(line) {
+                var trimmed = line.trim();
+                if (!trimmed) return;
+
+                var commentIndex = trimmed.indexOf(';');
+                var comment = '';
+                var codePart = trimmed;
+                if (commentIndex !== -1) {
+                    comment = trimmed.substring(commentIndex + 1).trim();
+                    codePart = trimmed.substring(0, commentIndex).trim();
+                }
+                if (!codePart) return;
+
+                var firstToken = codePart.split(/[,\s]/)[0].toUpperCase();
+
+                if (firstToken === 'LINE') {
+                    lineInputs.push({ codePart: codePart, comment: comment });
+                    return;
+                }
+                if (firstToken === 'HDIM' || firstToken === 'VDIM' || firstToken === 'ADIM') {
+                    dimInputs.push({ codePart: codePart, comment: comment });
+                    return;
+                }
+
+                var eqIndex = codePart.indexOf('=');
+                if (eqIndex === -1) return;
+
+                var name = codePart.substring(0, eqIndex).trim();
+                var valuePart = codePart.substring(eqIndex + 1).trim();
+
+                if (findTopLevelComma(valuePart) !== -1) {
+                    coordLines.push(trimmed);
+                } else {
+                    var value = parseFloat(valuePart);
+                    if (name && !isNaN(value)) {
+                        newVariables[name] = value;
+                        newVariableComments[name] = comment;
+                    }
+                }
+            });
+        }
+
+        variables = newVariables;
+        variableComments = newVariableComments;
+
+        // 좌표 범위 확장 및 파싱
+        var newCoordinates = {};
+        var newCoordinateComments = {};
+        if (coordLines.length > 0) {
+            var expandedCoordText = expandCoordinateRanges(coordLines.join('\n'));
+            expandedCoordText.split('\n').forEach(function(line) {
+                var trimmed = line.trim();
+                if (!trimmed) return;
+                var ci = trimmed.indexOf(';');
+                var comment = '';
+                var codePart = trimmed;
+                if (ci !== -1) {
+                    comment = trimmed.substring(ci + 1).trim();
+                    codePart = trimmed.substring(0, ci).trim();
+                }
+                if (!codePart) return;
+                var eqIdx = codePart.indexOf('=');
+                if (eqIdx === -1) return;
+                var name = codePart.substring(0, eqIdx).trim();
+                var formulaPart = codePart.substring(eqIdx + 1).trim();
+                var commaIdx = findTopLevelComma(formulaPart);
+                if (commaIdx === -1) return;
+                var xFormula = formulaPart.substring(0, commaIdx).trim();
+                var yFormula = formulaPart.substring(commaIdx + 1).trim();
+                if (xFormula && yFormula) {
+                    newCoordinates[name] = { x: xFormula, y: yFormula };
+                    newCoordinateComments[name] = comment;
+                }
+            });
+        }
+        userCoordinates = newCoordinates;
+        coordinateComments = newCoordinateComments;
+        calculateCoordinates();
+
+        // 선 파싱
+        var newLines = [];
+        var newLineGroups = [];
+        lineInputs.forEach(function(item) {
+            var pointsPart = item.codePart.replace(/^line[\s,]*/i, '');
+            var expandedCode = expandPointRanges(expandPointSequence(pointsPart));
+            var points = expandedCode.split(',').map(function(p) { return p.trim(); }).filter(function(p) { return p !== ''; });
+            if (points.length >= 2) {
+                newLineGroups.push({ points: points, comment: item.comment });
+                for (var i = 0; i < points.length - 1; i++) {
+                    newLines.push({ start: points[i], end: points[i + 1] });
+                }
+            }
+        });
+        lines = newLines;
+        lineGroups = newLineGroups;
+
+        // 치수선 파싱
+        var newDimensionLines = [];
+        dimInputs.forEach(function(item) {
+            var expandedCode = expandPointRanges(expandPointSequence(item.codePart));
+            var parts = expandedCode.split(',').map(function(p) { return p.trim(); });
+            if (parts.length >= 4) {
+                var type = parts[0].toUpperCase();
+                var direction = parseInt(parts[1]);
+                var points = parts.slice(2).filter(function(p) { return p !== ''; });
+                if ((direction === 1 || direction === -1) && points.length >= 2) {
+                    newDimensionLines.push({ type: type, points: points, direction: direction, comment: item.comment });
+                }
+            }
+        });
+        dimensionLines = newDimensionLines;
+
+        updateParseResult();
+    }
+
+    function updateParseResult() {
+        var result = document.getElementById('parseResult');
+        var html = '';
+
+        var varEntries = Object.entries(variables);
+        if (varEntries.length > 0) {
+            html += '<b>변수:</b> ' + varEntries.map(function([name, value], i) {
+                return (i + 1) + '. ' + name + '=' + value;
+            }).join(', ') + '<br>';
+        }
+
+        var coordEntries = Object.entries(userCoordinates);
+        if (coordEntries.length > 0) {
+            html += '<b>좌표(' + coordEntries.length + '개):</b> ' + coordEntries.map(function([name, coord], i) {
+                var calc = calculatedCoordinates[name];
+                var calcStr = calc && !isNaN(calc.x) ? ' = (' + calc.x.toFixed(1) + ', ' + calc.y.toFixed(1) + ')' : '';
+                return (i + 1) + '. ' + name + calcStr;
+            }).join(', ') + '<br>';
+        }
+
+        if (lineGroups.length > 0) {
+            html += '<b>선:</b> ' + lineGroups.map(function(g, i) {
+                return (i + 1) + '. ' + g.points[0] + '→' + g.points[g.points.length - 1] + '(' + g.points.length + '점)';
+            }).join(', ') + '<br>';
+        }
+
+        if (dimensionLines.length > 0) {
+            var dims = { 'HDIM': '수평', 'VDIM': '수직', 'ADIM': '경사' };
+            html += '<b>치수선:</b> ' + dimensionLines.map(function(dim, i) {
+                return (i + 1) + '. ' + dims[dim.type] + ' ' + dim.points.join('→');
+            }).join(', ');
+        }
+
+        result.innerHTML = html;
+    }
+
+    function updateMainInput() {
+        var textLines = [];
+        Object.entries(variables).forEach(function([name, value]) {
+            var comment = variableComments[name] ? ';' + variableComments[name] : '';
+            textLines.push(name + '=' + value + comment);
+        });
+        Object.entries(userCoordinates).forEach(function([name, coord]) {
+            var comment = coordinateComments[name] ? ';' + coordinateComments[name] : '';
+            textLines.push(name + '=' + coord.x + ',' + coord.y + comment);
+        });
+        lineGroups.forEach(function(group) {
+            var comment = group.comment ? ';' + group.comment : '';
+            textLines.push('line,' + group.points.join(',') + comment);
+        });
+        dimensionLines.forEach(function(dim) {
+            var comment = dim.comment ? ';' + dim.comment : '';
+            textLines.push(dim.type + ',' + dim.direction + ',' + dim.points.join(',') + comment);
+        });
+        document.getElementById('mainInput').value = textLines.join('\n');
     }
 
     function calculateCoordinates() {
@@ -401,47 +417,21 @@
             try {
                 let x = evaluateFormula(coord.x, calculatedCoordinates);
                 let y = evaluateFormula(coord.y, calculatedCoordinates);
-                
+
                 if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) {
                     throw new Error('계산 결과가 유효한 숫자가 아닙니다.');
                 }
-                
+
                 calculatedCoordinates[name] = { x: x, y: y };
             } catch (error) {
                 console.error(`Error calculating coordinate ${name}: ${error.message}`);
                 calculatedCoordinates[name] = { x: NaN, y: NaN };
             }
         }
-        updateCoordinateList();
-        // console.log('Calculated coordinates:', calculatedCoordinates);
-    }
-
-    function updateCoordinateList() {
-        // 텍스트박스에 현재 좌표들을 주석과 함께 표시
-        var textarea = document.getElementById('coordinateInput');
-        var coordinateLines = Object.entries(userCoordinates).map(function([name, coord]) {
-            var comment = coordinateComments[name];
-            if (comment) {
-                return `${name}:${coord.x},${coord.y};${comment}`;
-            }
-            return `${name}:${coord.x},${coord.y}`;
-        });
-        textarea.value = coordinateLines.join('\n');
-
-        // 좌표 목록도 표시 (계산된 값 포함)
-        var list = document.getElementById('coordinateList');
-        list.innerHTML = '좌표 목록: ' +
-            Object.entries(userCoordinates)
-                .map(function([name, coord], index) {
-                    var calc = calculatedCoordinates[name];
-                    var calcStr = calc ? ` = (${calc.x.toFixed(2)}, ${calc.y.toFixed(2)})` : '';
-                    return `${index + 1}. ${name}(${coord.x}, ${coord.y})${calcStr}`;
-                })
-                .join('<br>');
     }
 
     function evaluateFormula(formula, calculatedPoints) {
-        formula = formula.replace(/(\w+)\.([xy])/g, function(match, point, coord) {
+        formula = formula.replace(/(\w+(?:\[\d+\])?)\.([xy])/g, function(match, point, coord) {
             if (calculatedPoints[point] && !isNaN(calculatedPoints[point][coord])) {
                 return calculatedPoints[point][coord];
             }
@@ -468,202 +458,108 @@
         }
     }
 
-    var dimensions = {
-        "HDIM": "Horizontal Dimension",
-        "VDIM": "Vertical Dimension",
-        "ADIM": "Angular Dimension"
-    };
-
-    function updateDimSelects() {
-        var dimtypeSelect = document.getElementById('dimtype');
-        dimtypeSelect.innerHTML = '';
-        Object.keys(dimensions).forEach(function(name) {
-            dimtypeSelect.add(new Option(dimensions[name], name));
-        });
-    }
-
-    function updateCoordinateSelects() {
-        // 더 이상 select 박스를 사용하지 않음
-    }
-
-    function addLines() {
-        var input = document.getElementById('lineInput').value.trim();
-        if (!input) {
-            alert('선 정보를 입력해주세요.');
-            return;
+    function findTopLevelComma(str) {
+        var depth = 0;
+        for (var i = 0; i < str.length; i++) {
+            if (str[i] === '(') depth++;
+            else if (str[i] === ')') depth--;
+            else if (str[i] === ',' && depth === 0) return i;
         }
+        return -1;
+    }
 
-        var inputLines = input.split('\n');
-        var newLines = [];
-        var newLineGroups = [];
-        var errors = [];
+    function resolveRangeValue(value) {
+        value = value.trim();
+        if (/^\d+$/.test(value)) return parseInt(value);
+        if (variables.hasOwnProperty(value)) return variables[value];
+        throw new Error('범위 값을 해석할 수 없습니다: ' + value);
+    }
 
-        inputLines.forEach(function(line, index) {
-            var trimmedLine = line.trim();
-            if (!trimmedLine) return; // 빈 줄 무시
+    function expandCoordinateRanges(inputText) {
+        var lines = inputText.split('\n');
+        var result = [];
+
+        lines.forEach(function(line) {
+            var trimmed = line.trim();
+            if (!trimmed) { result.push(line); return; }
 
             // 세미콜론으로 주석 분리
-            var commentIndex = trimmedLine.indexOf(';');
+            var commentIndex = trimmed.indexOf(';');
             var comment = '';
-            var codePart = trimmedLine;
-
+            var codePart = trimmed;
             if (commentIndex !== -1) {
-                comment = trimmedLine.substring(commentIndex + 1).trim();
-                codePart = trimmedLine.substring(0, commentIndex).trim();
+                comment = ';' + trimmed.substring(commentIndex + 1);
+                codePart = trimmed.substring(0, commentIndex).trim();
             }
 
-            if (!codePart) return; // 주석만 있는 줄 무시
+            // 패턴: name[start-end]=formula
+            var match = codePart.match(/^(\w+)\[([^\]-]+)-([^\]]+)\]=(.+)$/);
+            if (!match) { result.push(line); return; }
 
-            var points = codePart.split(',').map(p => p.trim()).filter(p => p !== '');
+            var baseName = match[1];
+            var start = resolveRangeValue(match[2]);
+            var end = resolveRangeValue(match[3]);
+            var formula = match[4];
 
-            if (points.length < 2) {
-                errors.push(`${index + 1}번째 줄: 최소 2개 이상의 점을 입력해주세요.`);
-                return;
-            }
-
-            // 존재하지 않는 좌표 확인
-            var invalidPoints = points.filter(p => !userCoordinates.hasOwnProperty(p));
-            if (invalidPoints.length > 0) {
-                errors.push(`${index + 1}번째 줄: 존재하지 않는 좌표 - ${invalidPoints.join(', ')}`);
-                return;
-            }
-
-            // 선 그룹 저장
-            newLineGroups.push({ points: points, comment: comment });
-
-            // 연속된 점들을 선으로 변환
-            for (var i = 0; i < points.length - 1; i++) {
-                newLines.push({ start: points[i], end: points[i + 1] });
+            for (var i = start; i <= end; i++) {
+                // 수식 내의 'i'를 현재 인덱스로 치환 (단어 경계 기준)
+                var expanded = formula.replace(/\bi\b/g, i);
+                result.push(baseName + '[' + i + ']=' + expanded + comment);
             }
         });
 
-        if (errors.length > 0) {
-            alert('오류:\n' + errors.join('\n'));
-            return;
-        }
-
-        lines = newLines;
-        lineGroups = newLineGroups;
-        updateLineList();
-        drawGraph();
+        return result.join('\n');
     }
 
-    function updateLineList() {
-        // lineGroups를 텍스트박스에 주석과 함께 표시
-        var textarea = document.getElementById('lineInput');
-        var lineTexts = lineGroups.map(function(group) {
-            if (group.comment) {
-                return `${group.points.join(',')};${group.comment}`;
+    function expandPointRanges(text) {
+        return text.replace(/(\w+)\[([^\]-]+)-([^\]]+)\]/g, function(match, name, startStr, endStr) {
+            try {
+                var start = resolveRangeValue(startStr);
+                var end = resolveRangeValue(endStr);
+                var points = [];
+                for (var i = start; i <= end; i++) {
+                    points.push(name + '[' + i + ']');
+                }
+                return points.join(',');
+            } catch (e) {
+                return match; // 변환 실패 시 원본 유지
             }
-            return group.points.join(',');
         });
-        textarea.value = lineTexts.join('\n');
-
-        // 선 목록도 표시
-        var list = document.getElementById('lineList');
-        list.innerHTML = '선 목록: ' +
-            lines.map(function(line, index) {
-                return `${index + 1}. ${line.start} -> ${line.end}`;
-            }).join('<br>');
     }
 
-    function addDimensionLines() {
-        var input = document.getElementById('dimInput').value.trim();
-        if (!input) {
-            alert('치수선 정보를 입력해주세요.');
-            return;
-        }
-
-        var inputLines = input.split('\n');
-        var newDimensionLines = [];
-        var errors = [];
-        var validTypes = ['HDIM', 'VDIM', 'ADIM'];
-
-        inputLines.forEach(function(line, index) {
-            var trimmedLine = line.trim();
-            if (!trimmedLine) return; // 빈 줄 무시
-
-            // 세미콜론으로 주석 분리
-            var commentIndex = trimmedLine.indexOf(';');
-            var comment = '';
-            var codePart = trimmedLine;
-
-            if (commentIndex !== -1) {
-                comment = trimmedLine.substring(commentIndex + 1).trim();
-                codePart = trimmedLine.substring(0, commentIndex).trim();
+    function expandPointSequence(text) {
+        // 브라켓 표기: s[1]..s[20] 또는 s[0]..s[N] → s[1],s[2],...,s[20]
+        text = text.replace(/(\w+)\[(\w+)\]\.\.\1\[(\w+)\]/g, function(match, name, startStr, endStr) {
+            try {
+                var start = resolveRangeValue(startStr);
+                var end = resolveRangeValue(endStr);
+                var points = [];
+                var step = start <= end ? 1 : -1;
+                for (var i = start; step > 0 ? i <= end : i >= end; i += step) {
+                    points.push(name + '[' + i + ']');
+                }
+                return points.join(',');
+            } catch (e) {
+                return match;
             }
-
-            if (!codePart) return; // 주석만 있는 줄 무시
-
-            var parts = codePart.split(',').map(p => p.trim());
-
-            if (parts.length < 4) {
-                errors.push(`${index + 1}번째 줄: 형식 오류 (타입,방향,점1,점2,... 형식으로 입력)`);
-                return;
-            }
-
-            var type = parts[0].toUpperCase();
-            var direction = parseInt(parts[1]);
-            var points = parts.slice(2).filter(p => p !== '');
-
-            if (!validTypes.includes(type)) {
-                errors.push(`${index + 1}번째 줄: 유효하지 않은 타입 '${parts[0]}' (HDIM, VDIM, ADIM 중 선택)`);
-                return;
-            }
-
-            if (direction !== 1 && direction !== -1) {
-                errors.push(`${index + 1}번째 줄: 방향은 1 또는 -1이어야 합니다.`);
-                return;
-            }
-
-            if (points.length < 2) {
-                errors.push(`${index + 1}번째 줄: 최소 2개 이상의 점을 입력해주세요.`);
-                return;
-            }
-
-            var invalidPoints = points.filter(p => !userCoordinates.hasOwnProperty(p));
-            if (invalidPoints.length > 0) {
-                errors.push(`${index + 1}번째 줄: 존재하지 않는 좌표 - ${invalidPoints.join(', ')}`);
-                return;
-            }
-
-            newDimensionLines.push({
-                type: type,
-                points: points,
-                direction: direction,
-                comment: comment
-            });
         });
 
-        if (errors.length > 0) {
-            alert('오류:\n' + errors.join('\n'));
-            return;
-        }
-
-        dimensionLines = newDimensionLines;
-        updateDimensionLineList();
-        drawGraph();
-    }
-
-    function updateDimensionLineList() {
-        // 텍스트박스에 현재 치수선들을 주석과 함께 표시
-        var textarea = document.getElementById('dimInput');
-        var dimLines = dimensionLines.map(function(line) {
-            var base = `${line.type},${line.direction},${line.points.join(',')}`;
-            if (line.comment) {
-                return `${base};${line.comment}`;
+        // 접미사 표기: p1..p10 → p1,p2,...,p10
+        text = text.replace(/([A-Za-z_]\w*?)(\d+)\.\.\1(\d+)/g, function(match, prefix, startStr, endStr) {
+            var start = parseInt(startStr);
+            var end = parseInt(endStr);
+            var points = [];
+            var step = start <= end ? 1 : -1;
+            for (var i = start; step > 0 ? i <= end : i >= end; i += step) {
+                points.push(prefix + i);
             }
-            return base;
+            return points.join(',');
         });
-        textarea.value = dimLines.join('\n');
 
-        // 치수선 목록도 표시
-        var list = document.getElementById('dimList');
-        list.innerHTML = '치수선 목록: ' +
-            dimensionLines.map(function(line, index) {
-                return `${index + 1}. ${dimensions[line.type]}: ${line.points.join(' -> ')} (${line.direction > 0 ? '정방향' : '역방향'})`;
-            }).join('<br>');
+        return text;
     }
+
+
 
     function drawGraph() {
         calculateCoordinates();
@@ -1192,40 +1088,21 @@ function printGraphInfo() {
 function printTextInfo() {
     var textLines = [];
 
-    // 변수 정보
-    textLines.push('=== 변수 ===');
     Object.entries(variables).forEach(function([name, value]) {
-        var comment = variableComments[name] ? ' ; ' + variableComments[name] : '';
-        textLines.push(name + ' = ' + value + comment);
+        var comment = variableComments[name] ? ';' + variableComments[name] : '';
+        textLines.push(name + '=' + value + comment);
     });
-
-    // 좌표 정보
-    textLines.push('');
-    textLines.push('=== 좌표 ===');
     Object.entries(userCoordinates).forEach(function([name, coord]) {
-        var calc = calculatedCoordinates[name];
-        var calcStr = calc ? ' => (' + calc.x + ', ' + calc.y + ')' : '';
-        var comment = coordinateComments[name] ? ' ; ' + coordinateComments[name] : '';
-        textLines.push(name + ': ' + coord.x + ', ' + coord.y + calcStr + comment);
+        var comment = coordinateComments[name] ? ';' + coordinateComments[name] : '';
+        textLines.push(name + '=' + coord.x + ',' + coord.y + comment);
     });
-
-    // 선 정보
-    textLines.push('');
-    textLines.push('=== 선 ===');
-    lineGroups.forEach(function(group, index) {
-        var comment = group.comment ? ' ; ' + group.comment : '';
-        textLines.push((index + 1) + '. ' + group.points.join(' -> ') + comment);
+    lineGroups.forEach(function(group) {
+        var comment = group.comment ? ';' + group.comment : '';
+        textLines.push('line,' + group.points.join(',') + comment);
     });
-
-    // 치수선 정보
-    textLines.push('');
-    textLines.push('=== 치수선 ===');
-    dimensionLines.forEach(function(dim, index) {
-        var typeNames = { 'HDIM': '수평', 'VDIM': '수직', 'ADIM': '경사' };
-        var typeName = typeNames[dim.type] || dim.type;
-        var dirStr = dim.direction > 0 ? '정방향' : '역방향';
-        var comment = dim.comment ? ' ; ' + dim.comment : '';
-        textLines.push((index + 1) + '. [' + typeName + '/' + dirStr + '] ' + dim.points.join(' -> ') + comment);
+    dimensionLines.forEach(function(dim) {
+        var comment = dim.comment ? ';' + dim.comment : '';
+        textLines.push(dim.type + ',' + dim.direction + ',' + dim.points.join(',') + comment);
     });
 
     document.getElementById('graphInfo').value = textLines.join('\n');
@@ -1271,77 +1148,71 @@ function uploadData(event) {
 }
 
 function loadExampleData(silent) {
-    var exampleData = {
-        "variables": {
-            "H1": 2000,
-            "H2": 3000,
-            "H3": 1200,
-            "B1": 2500,
-            "B2": 2000,
-            "B3": 1200,
-            "B4": 500
+    var selected = document.getElementById('exampleSelect').value;
+    var examples = getExampleDataMap();
+    var example = examples[selected];
+    if (!example) return;
+
+    document.getElementById('mainInput').value = example.text;
+    document.getElementById('graphInfo').value = '';
+    parseAllInput();
+    drawGraph();
+}
+
+function getExampleDataMap() {
+    return {
+        retaining: {
+            text: [
+                'H1=2000;흉벽높이',
+                'H2=3000;벽체높이',
+                'H3=1200;기초두께',
+                'B1=2500;뒷굽폭',
+                'B2=2000;벽체두께',
+                'B3=1200;앞굽폭',
+                'B4=500;흉벽두께',
+                'p1=0,0',
+                'p2=p1.x,p1.y-H1',
+                'p3=p2.x+B2-B4,p2.y',
+                'p4=p3.x,p3.y-H2',
+                'p5=p4.x+B3,p4.y',
+                'p6=p5.x,p5.y-H3',
+                'p7=p6.x-B3-B2-B1,p6.y',
+                'p8=p7.x,p7.y+H3',
+                'p9=p8.x+B1,p8.y',
+                'p10=p9.x,p1.y',
+                'line,p1..p10,p1;외벽',
+                'HDIM,-1,p7,p6;전체폭',
+                'HDIM,1,p8,p9,p4,p5;상부폭',
+                'HDIM,1,p10,p1,p3;흉벽폭',
+                'VDIM,1,p6,p1;전체높이'
+            ].join('\n')
         },
-        "variableComments": {
-            "H1": "흉벽높이",
-            "H2": "벽체높이",
-            "H3": "기초두께",
-            "B1": "뒷굽폭",
-            "B2": "벽체두께",
-            "B3": "앞굽폭",
-            "B4": "흉벽두께"
+        sine: {
+            text: [
+                'A=500;진폭',
+                'L=2000;길이',
+                'N=20;분할수',
+                's[0-N]=L/N*i,A*Math.sin(2*Math.PI*i/N);sin곡선',
+                'line,s[0]..s[N]'
+            ].join('\n')
         },
-        "coordinates": {
-            "p1": { "x": "0", "y": "0" },
-            "p2": { "x": "p1.x", "y": "p1.y-H1" },
-            "p3": { "x": "p2.x+B2-B4", "y": "p2.y" },
-            "p4": { "x": "p3.x", "y": "p3.y-H2" },
-            "p5": { "x": "p4.x+B3", "y": "p4.y" },
-            "p6": { "x": "p5.x", "y": "p5.y-H3" },
-            "p7": { "x": "p6.x-B3-B2-B1", "y": "p6.y" },
-            "p8": { "x": "p7.x", "y": "p7.y+H3" },
-            "p9": { "x": "p8.x+B1", "y": "p8.y" },
-            "p10": { "x": "p9.x", "y": "p1.y" }
+        circle: {
+            text: [
+                'R=500;반지름',
+                'N=36;분할수',
+                'c[0-N]=R*Math.cos(2*Math.PI*i/N),R*Math.sin(2*Math.PI*i/N);원',
+                'line,c[0]..c[N],c[0]'
+            ].join('\n')
         },
-        "calculatedCoordinates": {
-            "p1": { "x": 0, "y": 0 },
-            "p2": { "x": 0, "y": -2000 },
-            "p3": { "x": 1500, "y": -2000 },
-            "p4": { "x": 1500, "y": -5000 },
-            "p5": { "x": 2700, "y": -5000 },
-            "p6": { "x": 2700, "y": -6200 },
-            "p7": { "x": -3000, "y": -6200 },
-            "p8": { "x": -3000, "y": -5000 },
-            "p9": { "x": -500, "y": -5000 },
-            "p10": { "x": -500, "y": 0 }
-        },
-        "lines": [
-            { "start": "p1", "end": "p2" },
-            { "start": "p2", "end": "p3" },
-            { "start": "p3", "end": "p4" },
-            { "start": "p4", "end": "p5" },
-            { "start": "p5", "end": "p6" },
-            { "start": "p6", "end": "p7" },
-            { "start": "p7", "end": "p8" },
-            { "start": "p8", "end": "p9" },
-            { "start": "p9", "end": "p10" },
-            { "start": "p10", "end": "p1" }
-        ],
-        "dimensionLines": [
-            { "type": "HDIM", "points": ["p6", "p7"], "direction": -1 },
-            { "type": "HDIM", "points": ["p8", "p9"], "direction": 1 },
-            { "type": "HDIM", "points": ["p9", "p4"], "direction": 1 },
-            { "type": "HDIM", "points": ["p4", "p5"], "direction": 1 },
-            { "type": "HDIM", "points": ["p10", "p1"], "direction": 1 },
-            { "type": "HDIM", "points": ["p1", "p3"], "direction": 1 },
-            { "type": "VDIM", "points": ["p6", "p1"], "direction": 1 }
-        ]
+        heart: {
+            text: [
+                'S=30;크기',
+                'N=72;분할수',
+                'h[0-N]=S*16*Math.pow(Math.sin(2*Math.PI*i/N),3),S*(13*Math.cos(2*Math.PI*i/N)-5*Math.cos(4*Math.PI*i/N)-2*Math.cos(6*Math.PI*i/N)-Math.cos(8*Math.PI*i/N));하트',
+                'line,h[0]..h[N],h[0]'
+            ].join('\n')
+        }
     };
-
-    // 예제 데이터를 텍스트 영역에 표시
-    document.getElementById('graphInfo').value = JSON.stringify(exampleData, null, 2);
-
-    // 데이터 읽기 함수 호출
-    readGraphInfo(silent);
 }
 
 function readGraphInfo(silent) {
@@ -1398,80 +1269,12 @@ function readJsonData(jsonString, silent) {
 
 function readTextData(textContent, silent) {
     try {
-        var newVariables = {};
-        var newVariableComments = {};
-        var newCoordinates = {};
-        var newCoordinateComments = {};
-        var newLineGroups = [];
-        var newDimensionLines = [];
-
-        var currentSection = '';
-        var lines_text = textContent.split('\n');
-
-        lines_text.forEach(function(line) {
-            var trimmedLine = line.trim();
-            if (!trimmedLine) return;
-
-            // 섹션 헤더 확인 (치수선을 선보다 먼저 체크해야 함)
-            if (trimmedLine.startsWith('===')) {
-                if (trimmedLine.includes('변수')) currentSection = 'variables';
-                else if (trimmedLine.includes('좌표')) currentSection = 'coordinates';
-                else if (trimmedLine.includes('치수선')) currentSection = 'dimensions';
-                else if (trimmedLine.includes('선')) currentSection = 'lines';
-                return;
-            }
-
-            // 섹션별 파싱
-            if (currentSection === 'variables') {
-                // 형식: name = value ; comment
-                var match = trimmedLine.match(/^(\w+)\s*=\s*([^\s;]+)\s*(?:;\s*(.*))?$/);
-                if (match) {
-                    newVariables[match[1]] = parseFloat(match[2]);
-                    newVariableComments[match[1]] = match[3] || '';
-                }
-            } else if (currentSection === 'coordinates') {
-                // 형식: name: x, y => (calcX, calcY) ; comment
-                var match = trimmedLine.match(/^(\w+):\s*([^,]+),\s*([^=>;]+)(?:\s*=>.*)?(?:\s*;\s*(.*))?$/);
-                if (match) {
-                    newCoordinates[match[1]] = { x: match[2].trim(), y: match[3].trim() };
-                    newCoordinateComments[match[1]] = match[4] || '';
-                }
-            } else if (currentSection === 'lines') {
-                // 형식: 1. p1 -> p2 -> p3 ; comment
-                var match = trimmedLine.match(/^\d+\.\s*(.+?)(?:\s*;\s*(.*))?$/);
-                if (match) {
-                    var points = match[1].split('->').map(p => p.trim());
-                    newLineGroups.push({ points: points, comment: match[2] || '' });
-                }
-            } else if (currentSection === 'dimensions') {
-                // 형식: 1. [수평/정방향] p1 -> p2 ; comment
-                var match = trimmedLine.match(/^\d+\.\s*\[([^\]\/]+)\/([^\]]+)\]\s*(.+?)(?:\s*;\s*(.*))?$/);
-                if (match) {
-                    var typeMap = { '수평': 'HDIM', '수직': 'VDIM', '경사': 'ADIM' };
-                    var type = typeMap[match[1]] || 'HDIM';
-                    var direction = match[2] === '정방향' ? 1 : -1;
-                    var points = match[3].split('->').map(p => p.trim());
-                    newDimensionLines.push({ type: type, direction: direction, points: points, comment: match[4] || '' });
-                }
-            }
-        });
-
-        variables = newVariables;
-        variableComments = newVariableComments;
-        userCoordinates = newCoordinates;
-        coordinateComments = newCoordinateComments;
-        lineGroups = newLineGroups;
-        dimensionLines = newDimensionLines;
-
-        // lineGroups에서 lines 생성
-        lines = [];
-        lineGroups.forEach(function(group) {
-            for (var i = 0; i < group.points.length - 1; i++) {
-                lines.push({ start: group.points[i], end: group.points[i + 1] });
-            }
-        });
-
-        applyLoadedData(silent, 'TEXT');
+        document.getElementById('mainInput').value = textContent;
+        parseAllInput();
+        drawGraph();
+        if (!silent) {
+            alert('TEXT 데이터를 성공적으로 읽어 적용했습니다.');
+        }
     } catch (error) {
         console.error('TEXT 파싱 에러:', error);
         if (!silent) {
@@ -1481,11 +1284,8 @@ function readTextData(textContent, silent) {
 }
 
 function applyLoadedData(silent, format) {
-    updateVariableList();
-    updateCoordinateList();
-    updateCoordinateSelects();
-    updateLineList();
-    updateDimensionLineList();
+    updateMainInput();
+    updateParseResult();
     calculateCoordinates();
     drawGraph();
 
@@ -1495,14 +1295,7 @@ function applyLoadedData(silent, format) {
 }
 
 // 전역 객체에 함수 할당
-window.addVariables = addVariables;
-window.updateVariableList = updateVariableList;
-window.addCoordinates = addCoordinates;
-window.updateCoordinateList = updateCoordinateList;
-window.updateCoordinateSelects = updateCoordinateSelects;
-window.addLines = addLines;
-window.addDimensionLines = addDimensionLines;
-window.updateLineList = updateLineList;
+window.applyAndDraw = applyAndDraw;
 window.drawGraph = drawGraph;
 window.toggleLabels = toggleLabels;
 window.setScale = setScale;
