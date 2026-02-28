@@ -30,12 +30,76 @@
 
 드롭다운에서 예제를 선택하고 "예제 로드" 버튼을 클릭하면 예제 데이터가 로드됩니다.
 
-| 예제 | 설명 |
-|------|------|
-| 교대 단면 | 옹벽 단면도 (변수로 치수 제어) |
-| SIN 곡선 | `s[0-N]=L/N*i,A*Math.sin(...)` |
-| 원 곡선 | `c[0-N]=R*Math.cos(...),R*Math.sin(...)` |
-| 하트 곡선 | 매개변수 하트 방정식 (`Math.pow` 사용) |
+#### 1. 교대 단면
+
+변수로 치수를 제어하는 옹벽 단면도입니다. 치수선(HDIM, VDIM)으로 각 부위의 크기를 표시합니다.
+
+```
+H1=2000;흉벽높이
+H2=3000;벽체높이
+H3=1200;기초두께
+B1=2500;뒷굽폭
+B2=2000;벽체두께
+B3=1200;앞굽폭
+B4=500;흉벽두께
+p1=0,0
+p2=p1.x,p1.y-H1
+p3=p2.x+B2-B4,p2.y
+p4=p3.x,p3.y-H2
+p5=p4.x+B3,p4.y
+p6=p5.x,p5.y-H3
+p7=p6.x-B3-B2-B1,p6.y
+p8=p7.x,p7.y+H3
+p9=p8.x+B1,p8.y
+p10=p9.x,p1.y
+line,p1..p10,p1;외벽
+HDIM,-1,p7,p6;전체폭
+HDIM,1,p8,p9,p4,p5;상부폭
+HDIM,1,p10,p1,p3;흉벽폭
+VDIM,1,p6,p1;전체높이
+```
+
+![교대 단면](https://raw.githubusercontent.com/dolljong/paradraw/claude/understand-project-wZRs1/screenshots/paradraw_retaining.png)
+
+#### 2. SIN 곡선
+
+반복 구문 `s[0-N]`을 사용하여 사인 곡선을 그립니다.
+
+```
+A=500;진폭
+L=2000;길이
+N=20;분할수
+s[0-N]=L/N*i,A*Math.sin(2*Math.PI*i/N);sin곡선
+line,s[0]..s[N]
+```
+
+![SIN 곡선](https://raw.githubusercontent.com/dolljong/paradraw/claude/understand-project-wZRs1/screenshots/paradraw_sine.png)
+
+#### 3. 원 곡선
+
+`Math.cos`, `Math.sin`으로 원을 그립니다.
+
+```
+R=500;반지름
+N=36;분할수
+c[0-N]=R*Math.cos(2*Math.PI*i/N),R*Math.sin(2*Math.PI*i/N);원
+line,c[0]..c[N],c[0]
+```
+
+![원 곡선](https://raw.githubusercontent.com/dolljong/paradraw/claude/understand-project-wZRs1/screenshots/paradraw_circle.png)
+
+#### 4. 하트 곡선
+
+`Math.pow`와 삼각함수를 조합한 매개변수 하트 방정식입니다.
+
+```
+S=30;크기
+N=72;분할수
+h[0-N]=S*16*Math.pow(Math.sin(2*Math.PI*i/N),3),S*(13*Math.cos(2*Math.PI*i/N)-5*Math.cos(4*Math.PI*i/N)-2*Math.cos(6*Math.PI*i/N)-Math.cos(8*Math.PI*i/N));하트
+line,h[0]..h[N],h[0]
+```
+
+![하트 곡선](https://raw.githubusercontent.com/dolljong/paradraw/claude/understand-project-wZRs1/screenshots/paradraw_heart.png)
 
 ### 반복/순차 구문
 
