@@ -59,7 +59,7 @@ HDIM,1,p10,p1,p3;흉벽폭
 VDIM,1,p6,p1;전체높이
 ```
 
-![교대 단면](screenshots/paradraw_retaining.png)
+![교대 단면](https://raw.githubusercontent.com/dolljong/paradraw/claude/understand-project-wZRs1/screenshots/paradraw_retaining.png)
 
 #### 2. SIN 곡선
 
@@ -73,7 +73,7 @@ s[0-N]=L/N*i,A*Math.sin(2*Math.PI*i/N);sin곡선
 line,s[0]..s[N]
 ```
 
-![SIN 곡선](screenshots/paradraw_sine.png)
+![SIN 곡선](https://raw.githubusercontent.com/dolljong/paradraw/claude/understand-project-wZRs1/screenshots/paradraw_sine.png)
 
 #### 3. 원 곡선
 
@@ -86,7 +86,7 @@ c[0-N]=R*Math.cos(2*Math.PI*i/N),R*Math.sin(2*Math.PI*i/N);원
 line,c[0]..c[N],c[0]
 ```
 
-![원 곡선](screenshots/paradraw_circle.png)
+![원 곡선](https://raw.githubusercontent.com/dolljong/paradraw/claude/understand-project-wZRs1/screenshots/paradraw_circle.png)
 
 #### 4. 하트 곡선
 
@@ -99,7 +99,7 @@ h[0-N]=S*16*Math.pow(Math.sin(2*Math.PI*i/N),3),S*(13*Math.cos(2*Math.PI*i/N)-5*
 line,h[0]..h[N],h[0]
 ```
 
-![하트 곡선](screenshots/paradraw_heart.png)
+![하트 곡선](https://raw.githubusercontent.com/dolljong/paradraw/claude/understand-project-wZRs1/screenshots/paradraw_heart.png)
 
 ### 반복/순차 구문
 
